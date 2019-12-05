@@ -156,17 +156,23 @@ module Trainer
 
       # Parses JSON into ActionsInvocationRecord to find a list of all ids for ActionTestPlanRunSummaries
       actions_invocation_record = Trainer::XCResult::ActionsInvocationRecord.new(result_bundle_object)
-      test_refs = actions_invocation_record.actions.map do |action|
-        action.action_result.tests_ref
-      end.compact
-      ids = test_refs.map(&:id)
+
+      actions_with_tests_ref = actions_invocation_record.actions.reject { |action| action.action_result.tests_ref.nil? }
+      test_refs = actions_with_tests_ref.map do |action|
+        tests_ref_id = action.action_result.tests_ref.id
+        device = action.run_destination.display_name
+        { tests_ref_id: tests_ref_id, device: device }
+      end
 
       # Maps ids into ActionTestPlanRunSummaries by executing xcresulttool to get JSON
       # containing specific information for each test summary,
-      summaries = ids.map do |id|
+      summaries = test_refs.map do |test_ref|
+        id = test_ref[:tests_ref_id]
+        device = test_ref[:device]
         raw = execute_cmd("xcrun xcresulttool get --format json --path #{path} --id #{id}")
         json = JSON.parse(raw)
-        Trainer::XCResult::ActionTestPlanRunSummaries.new(json)
+        summaries = Trainer::XCResult::ActionTestPlanRunSummaries.new(json)
+        { summaries: summaries, device: device }
       end
 
       # Converts the ActionTestPlanRunSummaries to data for junit generator
@@ -176,12 +182,22 @@ module Trainer
 
     def summaries_to_data(summaries, failures)
       # Gets flat list of all ActionTestableSummary
-      all_summaries = summaries.map(&:summaries).flatten
-      testable_summaries = all_summaries.map(&:testable_summaries).flatten
+      all_summaries = summaries.map do |summary|
+        summary[:summaries].summaries.map do |inner_summary|
+          { summary: inner_summary, device: summary[:device] }
+        end
+      end.flatten
+
+      testable_summaries = all_summaries.map do |summary|
+        summary[:summary].testable_summaries.map do |testable_summary|
+          { testable_summary: testable_summary, device: summary[:device] }
+        end
+      end.flatten
 
       # Maps ActionTestableSummary to rows for junit generator
       rows = testable_summaries.map do |testable_summary|
-        all_tests = testable_summary.all_tests.flatten
+        all_tests = testable_summary[:testable_summary].all_tests.flatten
+        device = testable_summary[:device]
 
         test_rows = all_tests.map do |test|
           test_row = {
@@ -211,11 +227,12 @@ module Trainer
         end
 
         row = {
-          project_path: testable_summary.project_relative_path,
-          target_name: testable_summary.target_name,
-          test_name: testable_summary.name,
+          project_path: testable_summary[:testable_summary].project_relative_path,
+          target_name: testable_summary[:testable_summary].target_name,
+          test_name: testable_summary[:testable_summary].name,
           duration: all_tests.map(&:duration).inject(:+),
-          tests: test_rows
+          tests: test_rows,
+          device: device
         }
 
         row[:number_of_tests] = row[:tests].count

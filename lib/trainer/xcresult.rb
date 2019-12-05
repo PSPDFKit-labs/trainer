@@ -237,14 +237,32 @@ module Trainer
       attr_accessor :scheme_command_name
       attr_accessor :scheme_task_name
       attr_accessor :title
+      attr_accessor :run_destination
       attr_accessor :build_result
       attr_accessor :action_result
       def initialize(data)
         self.scheme_command_name = fetch_value(data, "schemeCommandName")
         self.scheme_task_name = fetch_value(data, "schemeTaskName")
         self.title = fetch_value(data, "title")
+        self.run_destination = ActionRunDestinationRecord.new(data["runDestination"])
         self.build_result = ActionResult.new(data["buildResult"])
         self.action_result = ActionResult.new(data["actionResult"])
+        super
+      end
+    end
+
+    # - ActionRunDestinationRecord
+    #   * Kind: object
+    #   * Properties:
+    #     + displayName: String
+    #     + targetArchitecture: String
+    #     + targetDeviceRecord: ActionDeviceRecord
+    #     + localComputerRecord: ActionDeviceRecord
+    #     + targetSDKRecord: ActionSDKRecord
+    class ActionRunDestinationRecord < AbstractObject
+      attr_accessor :display_name
+      def initialize(data)
+        self.display_name = fetch_value(data, "displayName")
         super
       end
     end
