@@ -146,12 +146,30 @@ module Trainer
       return output
     end
 
+    def use_legacy_xcresulttool_option?
+      output = execute_cmd("xcrun xcresulttool version")
+      # Output should look like: "xcresulttool version 23021, format version 3.53 (current)"
+      if output =~ /xcresulttool version (\d+),/
+        version_number = $1.to_i
+        # Check if we're using Xcode 16 or newer. 
+        # 16 beta 3 has 23021 
+        # 15.4 has 22608
+        return version_number > 23000
+      else
+        raise "xcrun xcresulttool version failed to run or didn't output the expected format."
+      end
+    end
+
     def parse_xcresult(path)
       require 'shellwords'
       path = Shellwords.escape(path)
 
       # Executes xcresulttool to get JSON format of the result bundle object
-      result_bundle_object_raw = execute_cmd("xcrun xcresulttool get --format json --path #{path}")
+      get_results_command = "xcrun xcresulttool get --format json --path #{path}"
+      if use_legacy_xcresulttool_option?
+        get_results_command += " --legacy"
+      end
+      result_bundle_object_raw = execute_cmd(get_results_command)
       result_bundle_object = JSON.parse(result_bundle_object_raw)
 
       # Parses JSON into ActionsInvocationRecord to find a list of all ids for ActionTestPlanRunSummaries
@@ -169,7 +187,11 @@ module Trainer
       summaries = test_refs.map do |test_ref|
         id = test_ref[:tests_ref_id]
         device = test_ref[:device]
-        raw = execute_cmd("xcrun xcresulttool get --format json --path #{path} --id #{id}")
+        get_results_id_command = "xcrun xcresulttool get --format json --path #{path} --id #{id}"
+        if use_legacy_xcresulttool_option?
+          get_results_id_command += " --legacy"
+        end
+        raw = execute_cmd(get_results_id_command)
         json = JSON.parse(raw)
         summaries = Trainer::XCResult::ActionTestPlanRunSummaries.new(json)
         { summaries: summaries, device: device }
