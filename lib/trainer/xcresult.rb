@@ -152,6 +152,10 @@ module Trainer
         self.summary = fetch_value(data, "summary")
         super(data, parent)
       end
+
+      def all_subtests
+        return [self]
+      end
     end
 
     # - ActionTestSummaryGroup
