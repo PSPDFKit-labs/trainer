@@ -115,9 +115,42 @@ module Trainer
           return ActionTestSummaryGroup.new(data, parent)
         elsif type == "ActionTestMetadata"
           return ActionTestMetadata.new(data, parent)
+        elsif type == "ActionTestSummary"
+          return ActionTestSummary.new(data, parent)
         else
           raise "Unsupported type: #{type}"
         end
+      end
+    end
+
+    # - ActionTestSummary
+    #   * Supertype: ActionTestSummaryIdentifiableObject
+    #   * Kind: object
+    #   * Properties:
+    #     + testStatus: String
+    #     + duration: Double
+    #     + performanceMetrics: [ActionTestPerformanceMetricSummary]
+    #     + failureSummaries: [ActionTestFailureSummary]
+    #     + expectedFailures: [ActionTestExpectedFailure]
+    #     + skipNoticeSummary: ActionTestNoticeSummary?
+    #     + activitySummaries: [ActionTestActivitySummary]
+    #     + repetitionPolicySummary: ActionTestRepetitionPolicySummary?
+    #     + arguments: [TestArgument]
+    #     + configuration: ActionTestConfiguration?
+    #     + warningSummaries: [ActionTestIssueSummary]
+    #     + summary: String?
+    #     + documentation: [TestDocumentation]
+    #     + trackedIssues: [IssueTrackingMetadata]
+    #     + tags: [TestTag]
+    class ActionTestSummary < ActionTestSummaryIdentifiableObject
+      attr_accessor :test_status
+      attr_accessor :duration
+      attr_accessor :summary
+      def initialize(data, parent)
+        self.test_status = fetch_value(data, "testStatus")
+        self.duration = fetch_value(data, "duration").to_f   
+        self.summary = fetch_value(data, "summary")
+        super(data, parent)
       end
     end
 
