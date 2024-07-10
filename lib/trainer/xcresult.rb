@@ -156,6 +156,35 @@ module Trainer
       def all_subtests
         return [self]
       end
+
+      def find_failure(failures)
+        if self.test_status == "Failure"
+          # Tries to match failure on test case name
+          # Example TestFailureIssueSummary:
+          #   producingTarget: "TestThisDude"
+          #   test_case_name: "TestThisDude.testFailureJosh2()" (when Swift)
+          #     or "-[TestThisDudeTests testFailureJosh2]" (when Objective-C)
+          # Example ActionTestMetadata
+          #   identifier: "TestThisDude/testFailureJosh2()" (when Swift)
+          #     or identifier: "TestThisDude/testFailureJosh2" (when Objective-C)
+
+          found_failure = failures.find do |failure|
+            # Clean test_case_name to match identifier format
+            # Sanitize for Swift by replacing "." for "/"
+            # Sanitize for Objective-C by removing "-", "[", "]", and replacing " " for ?/
+            sanitized_test_case_name = failure.test_case_name
+                                              .tr(".", "/")
+                                              .tr("-", "")
+                                              .tr("[", "")
+                                              .tr("]", "")
+                                              .tr(" ", "/")
+            self.identifier == sanitized_test_case_name
+          end
+          return found_failure
+        else
+          return nil
+        end
+      end
     end
 
     # - ActionTestSummaryGroup
