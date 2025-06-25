@@ -149,7 +149,8 @@ module Trainer
     def use_legacy_xcresulttool_option?
       output = execute_cmd("xcrun xcresulttool version")
       # Output should look like: "xcresulttool version 23021, format version 3.53 (current)"
-      if output =~ /xcresulttool version (\d+),/
+      # Or newer format: "xcresulttool version 24038.1, schema version: 0.0.0 (legacy commands format version: 3.53)"
+      if output =~ /xcresulttool version (\d+)(?:\.\d+)?,/
         version_number = $1.to_i
         # Check if we're using Xcode 16 or newer. 
         # 16 beta 3 has 23021 
