@@ -147,7 +147,11 @@ module Trainer
     end
 
     def use_legacy_xcresulttool_option?
-      output = execute_cmd("xcrun xcresulttool version")
+      self.class.use_legacy_xcresulttool_option?
+    end
+
+    def self.use_legacy_xcresulttool_option?
+      output = `xcrun xcresulttool version`
       # Output should look like: "xcresulttool version 23021, format version 3.53 (current)"
       # Or newer format: "xcresulttool version 24038.1, schema version: 0.0.0 (legacy commands format version: 3.53)"
       if output =~ /xcresulttool version (\d+)(?:\.\d+)?,/
@@ -163,6 +167,7 @@ module Trainer
 
     def parse_xcresult(path)
       require 'shellwords'
+      original_path = path
       path = Shellwords.escape(path)
 
       # Executes xcresulttool to get JSON format of the result bundle object
@@ -198,12 +203,25 @@ module Trainer
         { summaries: summaries, device: device }
       end
 
-      # Converts the ActionTestPlanRunSummaries to data for junit generator
-      failures = actions_invocation_record.issues.test_failure_summaries || []
-      summaries_to_data(summaries, failures)
+      # Extract test failure summaries from all actions
+      failures = []
+      
+      # First try top-level issues
+      top_level_failures = actions_invocation_record.issues.test_failure_summaries || []
+      failures.concat(top_level_failures)
+      
+      # Then check each action's issues for test failure summaries
+      actions_invocation_record.actions.each do |action|
+        if action.respond_to?(:action_result) && action.action_result.respond_to?(:issues) && action.action_result.issues
+          action_failures = action.action_result.issues.test_failure_summaries || []
+          failures.concat(action_failures)
+        end
+      end
+      
+      summaries_to_data(summaries, failures, original_path)
     end
 
-    def summaries_to_data(summaries, failures)
+    def summaries_to_data(summaries, failures, xcresult_path = nil)
       # Gets flat list of all ActionTestableSummary
       all_summaries = summaries.map do |summary|
         summary[:summaries].summaries.map do |inner_summary|
@@ -243,6 +261,18 @@ module Trainer
               message: "",
               performance_failure: {},
               failure_message: failure.failure_message
+            }]
+          elsif test.test_status == "Failure"
+            # If no failure found in global summaries but test status is Failure,
+            # get the actual failure message from the test summary
+            failure_message = xcresult_path ? test.get_failure_message(xcresult_path) : nil
+            failure_message ||= "Test failed"
+            test_row[:failures] = [{
+              file_name: "",
+              line_number: 0,
+              message: "",
+              performance_failure: {},
+              failure_message: failure_message
             }]
           end
 

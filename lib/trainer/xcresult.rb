@@ -225,12 +225,14 @@ module Trainer
       attr_accessor :performance_metrics_count
       attr_accessor :failure_summaries_count
       attr_accessor :activity_summaries_count
+      attr_accessor :summary_ref
       def initialize(data, parent)
         self.test_status = fetch_value(data, "testStatus")
         self.duration = fetch_value(data, "duration").to_f
         self.performance_metrics_count = fetch_value(data, "performanceMetricsCount")
         self.failure_summaries_count = fetch_value(data, "failureSummariesCount")
         self.activity_summaries_count = fetch_value(data, "activitySummariesCount")
+        self.summary_ref = data["summaryRef"] ? data["summaryRef"]["id"]["_value"] : nil
         super(data, parent)
       end
 
@@ -265,6 +267,39 @@ module Trainer
         else
           return nil
         end
+      end
+
+      def get_failure_message(xcresult_path)
+        return nil unless self.test_status == "Failure" && self.summary_ref
+
+        require 'shellwords'
+        escaped_path = Shellwords.escape(xcresult_path)
+        escaped_id = Shellwords.escape(self.summary_ref)
+        
+        # Get the detailed test summary to extract failure message
+        get_summary_command = "xcrun xcresulttool get object --format json --path #{escaped_path} --id #{escaped_id}"
+        if Trainer::TestParser.use_legacy_xcresulttool_option?
+          get_summary_command += " --legacy"
+        end
+        
+        begin
+          summary_raw = `#{get_summary_command}`
+          if $?.success? && !summary_raw.empty?
+            summary_data = JSON.parse(summary_raw)
+            
+            # Extract the first failure message
+            failure_summaries = summary_data.dig("failureSummaries", "_values")
+            if failure_summaries&.any?
+              message = failure_summaries.first.dig("message", "_value")
+              return message || "Test failed"
+            end
+          end
+        rescue => e
+          # Fallback to generic message if we can't parse the summary
+          return "Test failed"
+        end
+        
+        "Test failed"
       end
     end
 
